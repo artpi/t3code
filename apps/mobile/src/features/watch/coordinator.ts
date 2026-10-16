@@ -62,6 +62,7 @@ import {
 import { watchNative } from "./native";
 import { deliverWatchSubmission, validateWatchSubmission } from "./submission";
 import { isMissingWatchProjectFile } from "./projectFile";
+import { createWatchThreadStateAtoms } from "./threadState";
 
 type Selection = { environmentId: EnvironmentId; threadId: ThreadId; before?: string };
 type ProjectSelection = { environmentId: EnvironmentId; projectId: ProjectId };
@@ -72,6 +73,10 @@ const threadLimitAtom = Atom.make(20);
 const threadOffsetAtom = Atom.make(0);
 const projectOffsetAtom = Atom.make(0);
 const projectLimitAtom = Atom.make(20);
+const watchThreadStates = createWatchThreadStateAtoms({
+  shellAtom: environmentThreadShells.threadShellAtom,
+  stateAtom: environmentThreads.stateAtom,
+});
 
 export async function startWatchCoordinator(): Promise<() => void> {
   if (!watchNative) return () => {};
@@ -111,7 +116,7 @@ export async function startWatchCoordinator(): Promise<() => void> {
     const acknowledged = get(acknowledgedThreadMessagesAtom);
     const failures = get(threadComposerErrorsAtom);
     const selectedResult = selected
-      ? get(environmentThreads.stateAtom(selected.environmentId, selected.threadId))
+      ? get(watchThreadStates.stateAtom(selected.environmentId, selected.threadId))
       : null;
     const state = selectedResult ? Option.getOrNull(AsyncResult.value(selectedResult)) : null;
     const projection = state ? Option.getOrNull(state.data) : null;
@@ -315,11 +320,12 @@ export async function startWatchCoordinator(): Promise<() => void> {
           return entry.outcome;
         const message = entry.message;
         if (!message) return entry.outcome;
-        const deliveryState = Option.getOrNull(
-          AsyncResult.value(
-            get(environmentThreads.stateAtom(message.environmentId, message.threadId)),
-          ),
+        const deliveryResult = get(
+          watchThreadStates.stateAtom(message.environmentId, message.threadId),
         );
+        const deliveryState = deliveryResult
+          ? Option.getOrNull(AsyncResult.value(deliveryResult))
+          : null;
         const deliveryProjection = deliveryState ? Option.getOrNull(deliveryState.data) : null;
         const seen =
           deliveryProjection?.messages.some((row) => row.id === message.messageId) === true ||
@@ -464,11 +470,10 @@ export async function startWatchCoordinator(): Promise<() => void> {
           threadId: request.threadId,
           ...(request.before ? { before: request.before } : {}),
         });
-        const state = Option.getOrNull(
-          AsyncResult.value(
-            registry.get(environmentThreads.stateAtom(request.environmentId, request.threadId)),
-          ),
+        const result = registry.get(
+          watchThreadStates.stateAtom(request.environmentId, request.threadId),
         );
+        const state = result ? Option.getOrNull(AsyncResult.value(result)) : null;
         if (
           request.before &&
           previous?.threadId === request.threadId &&
