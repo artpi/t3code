@@ -151,6 +151,42 @@
   ],
   "packageOverrides": [
     {
+      "name": "@bacons/xcode",
+      "version": "1.0.0-alpha.32",
+      "sourceUrl": "https://github.com/EvanBacon/xcode",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "copyrights": ["Copyright (c) Evan Bacon"]
+      }
+    },
+    {
+      "name": "@expo/plist",
+      "version": "0.0.18",
+      "sourceUrl": "https://github.com/expo/expo-cli",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "copyrights": ["Copyright (c) 2015-present 650 Industries, Inc. (aka Expo)"]
+      }
+    },
+    {
+      "name": "@react-native/normalize-colors",
+      "version": "0.79.7",
+      "sourceUrl": "https://github.com/facebook/react-native/tree/v0.79.7",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "copyrights": ["Copyright (c) Meta Platforms, Inc. and affiliates."]
+      }
+    },
+    {
+      "name": "eastasianwidth",
+      "version": "0.2.0",
+      "sourceUrl": "https://github.com/komagata/eastasianwidth/blob/master/MIT-LICENSE.txt",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "copyrights": ["Copyright komagata"]
+      }
+    },
+    {
       "name": "@bufbuild/protobuf",
       "version": "1.10.0",
       "generatedNotices": [

@@ -16,5 +16,17 @@ if (!majorVersion) {
 module.exports = {
   // Hash the pinned Screens fork's native source, rather than only its version.
   nativeModuleSourceType: "files",
-  extraSources: [{ type: "contents", id: "appMajorVersion", contents: majorVersion }],
+  extraSources: [
+    { type: "contents", id: "appMajorVersion", contents: majorVersion },
+    ...(process.env.T3CODE_WATCH_COMPANION === "1"
+      ? fs
+          .readdirSync(path.join(__dirname, "targets/watch"))
+          .filter((name) => /\.(swift|plist|js)$/.test(name))
+          .map((name) => ({
+            type: "file",
+            filePath: `targets/watch/${name}`,
+            reasons: ["watchCompanion"],
+          }))
+      : []),
+  ],
 };
