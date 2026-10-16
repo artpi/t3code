@@ -5,6 +5,16 @@
     "promptToConfigurePushNotifications": false
   },
   "build": {
+    "artpi": {
+      "extends": "development",
+      "env": {
+        "T3CODE_WATCH_COMPANION": "1"
+      },
+      "developmentClient": false,
+      "environment": "preview",
+      "channel": "artpi",
+      "autoIncrement": true
+    },
     "development": {
       "corepack": true,
       "env": {

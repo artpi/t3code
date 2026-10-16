@@ -46,6 +46,7 @@
     "typecheck": "tsc-rs --noEmit"
   },
   "dependencies": {
+    "@bacons/apple-targets": "5.0.0",
     "@clerk/expo": "catalog:",
     "@effect/atom-react": "catalog:",
     "@expo-google-fonts/dm-sans": "^0.4.2",
