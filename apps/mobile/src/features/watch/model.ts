@@ -7,6 +7,18 @@ export function watchThreadStatus(thread: EnvironmentThreadShell): string {
   return thread.runtime?.status ?? thread.latestRun?.status ?? "idle";
 }
 
+export function watchThreadActivityAt(
+  thread: Pick<EnvironmentThreadShell, "latestRun" | "latestUserMessageAt" | "createdAt">,
+): string {
+  return (
+    thread.latestRun?.completedAt ??
+    thread.latestRun?.startedAt ??
+    thread.latestRun?.requestedAt ??
+    thread.latestUserMessageAt ??
+    thread.createdAt
+  );
+}
+
 export function watchPageLimit(value: number): number {
   return Number.isFinite(value) ? Math.max(1, Math.min(20, Math.floor(value))) : 20;
 }

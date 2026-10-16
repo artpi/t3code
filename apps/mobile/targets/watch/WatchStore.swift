@@ -10,10 +10,12 @@ final class WatchStore: NSObject, ObservableObject, WCSessionDelegate {
   @Published var transportError: String?
   @Published var pending: PendingRequest?
   @Published var lastOutcome: WatchOutcome?
+  @Published var lastSubmission: PendingRequest?
   @Published var conversation: [WatchMessage] = []
   @Published var conversationId: String?
   @Published var threads: [WatchThread] = []
   @Published var projects: [WatchProject] = []
+  @Published var selectedProjectId: String?
   private var threadOffset = 0
   private var projectOffset = 0
   private let defaults = UserDefaults.standard
@@ -27,7 +29,10 @@ final class WatchStore: NSObject, ObservableObject, WCSessionDelegate {
     if let data = defaults.data(forKey: "snapshot.v1") { snapshot = try? decoder.decode(WatchSnapshot.self, from: data) }
     threads = snapshot?.threads ?? []
     projects = snapshot?.projects ?? []
+    selectedProjectId = defaults.string(forKey: "selectedProject.v1")
     if let data = defaults.data(forKey: "pending.v1") { pending = try? decoder.decode(PendingRequest.self, from: data) }
+    if let data = defaults.data(forKey: "submission.v1") { lastSubmission = try? decoder.decode(PendingRequest.self, from: data) }
+    if lastSubmission == nil { lastSubmission = pending }
     if let data = defaults.data(forKey: "outcome.v1") { lastOutcome = try? decoder.decode(WatchOutcome.self, from: data) }
     if WCSession.isSupported() {
       WCSession.default.delegate = self
@@ -45,7 +50,13 @@ final class WatchStore: NSObject, ObservableObject, WCSessionDelegate {
   func refreshProjects() { projectOffset = 0; request("projects", fields: ["limit": 20, "offset": 0]) }
   func moreProjects() { projectOffset += 20; request("projects", fields: ["limit": 20, "offset": projectOffset]) }
   func selectProject(_ project: WatchProject) {
+    selectedProjectId = project.id
+    defaults.set(project.id, forKey: "selectedProject.v1")
     request("project", fields: ["environmentId": project.environmentId, "projectId": project.projectId])
+  }
+  func thread(for request: PendingRequest) -> WatchThread? {
+    threads.first(where: { $0.environmentId == request.environmentId && $0.threadId == request.destinationThreadId }) ??
+      submissionThread(request, project: projects.first(where: { $0.environmentId == request.environmentId && $0.projectId == request.projectId }))
   }
   func openThread(environmentId: String, threadId: String, before: String? = nil) {
     let key = environmentId + ":" + threadId
@@ -58,18 +69,40 @@ final class WatchStore: NSObject, ObservableObject, WCSessionDelegate {
     request("detail", fields: fields)
   }
 
-  func submit(text: String, draftKey: String, thread: WatchThread? = nil, project: WatchProject? = nil) {
-    guard pending == nil, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+  @discardableResult
+  func submit(text: String, draftKey: String, thread: WatchThread? = nil, project: WatchProject? = nil, modelKey: String? = nil) -> PendingRequest? {
+    guard pending == nil, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.utf16.count <= 16000 else { return nil }
+    guard let environmentId = project?.environmentId ?? thread?.environmentId else { return nil }
     let request = PendingRequest(id: UUID().uuidString, type: project == nil ? "reply" : "create",
-      createdAt: ISO8601DateFormatter().string(from: Date()), environmentId: project?.environmentId ?? thread!.environmentId,
+      createdAt: ISO8601DateFormatter().string(from: Date()), environmentId: environmentId,
       threadId: thread?.threadId, projectId: project?.projectId, defaultsKey: project?.defaultsKey,
-      text: text, draftKey: draftKey)
+      text: text, draftKey: draftKey, modelKey: modelKey)
     // Persist before asking the phone to perform any mutation.
     defaults.set(try? encoder.encode(request), forKey: "pending.v1")
+    defaults.set(try? encoder.encode(request), forKey: "submission.v1")
+    lastSubmission = request
     pending = request
     lastOutcome = nil
     defaults.removeObject(forKey: "outcome.v1")
     send(request.dictionary, allowQueue: true)
+    return request
+  }
+
+  func respond(text: String, thread: WatchThread) {
+    let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !text.isEmpty else { return }
+    let key = "thread." + thread.id
+    saveDraft(text, key: key)
+    guard text.utf16.count <= 16000 else {
+      transportError = "Your reply is too long. Keep it under 16,000 characters. Your draft is saved."
+      return
+    }
+    guard pending == nil else {
+      transportError = "Your reply is saved. Wait for the pending message before sending it."
+      return
+    }
+    submit(text: text, draftKey: key, thread: thread)
+    openThread(environmentId: thread.environmentId, threadId: thread.threadId)
   }
 
   func retryPending() {
@@ -151,6 +184,12 @@ final class WatchStore: NSObject, ObservableObject, WCSessionDelegate {
         conversation = conversation.filter { !incomingIDs.contains($0.id) } + detail.messages
       }
       conversation = conversation.map { merged[$0.id] ?? $0 }
+      if let submission = lastSubmission,
+         detail.environmentId == submission.environmentId, detail.threadId == submission.destinationThreadId,
+         conversation.contains(where: { $0.messageId == "watch-" + submission.id }) {
+        lastSubmission = nil
+        defaults.removeObject(forKey: "submission.v1")
+      }
     }
     if let pending, let outcome = incoming.outcomes.first(where: { $0.id == pending.id }) {
       lastOutcome = outcome

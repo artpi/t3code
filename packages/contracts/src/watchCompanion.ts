@@ -45,6 +45,7 @@ export const WatchRequest = Schema.Union([
     environmentId: EnvironmentId,
     projectId: ProjectId,
     defaultsKey: Schema.String,
+    modelKey: Schema.optional(Schema.String),
     text: Schema.String,
   }),
   Schema.Struct({ ...RequestBase, type: Schema.Literal("cancel"), requestId: Schema.String }),
@@ -59,6 +60,7 @@ export const WatchThread = Schema.Struct({
   environmentTitle: Schema.String,
   status: Schema.String,
   updatedAt: Schema.String,
+  lastActivityAt: Schema.optional(Schema.String),
   canReply: Schema.Boolean,
 });
 export const WatchProject = Schema.Struct({
@@ -67,6 +69,10 @@ export const WatchProject = Schema.Struct({
   title: Schema.String,
   environmentTitle: Schema.String,
   model: Schema.String,
+  defaultModelKey: Schema.optional(Schema.String),
+  models: Schema.optional(
+    Schema.Array(Schema.Struct({ key: Schema.String, label: Schema.String })),
+  ),
   runtimeMode: Schema.String,
   workspaceMode: Schema.String,
   defaultsKey: Schema.String,

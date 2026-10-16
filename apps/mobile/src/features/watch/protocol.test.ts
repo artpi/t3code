@@ -25,11 +25,26 @@ const fixture = {
       environmentTitle: "Laptop",
       status: "running",
       updatedAt: "2026-10-15T10:00:00.000Z",
+      lastActivityAt: "2026-10-14T10:00:00.000Z",
       canReply: true,
     },
   ],
   projectOffset: 0,
-  projects: [],
+  projects: [
+    {
+      environmentId: "remote",
+      projectId: "project",
+      title: "T3 Code",
+      environmentTitle: "Laptop",
+      model: "starred",
+      defaultModelKey: "codex:starred",
+      models: [{ key: "codex:starred", label: "Starred model · Codex" }],
+      runtimeMode: "full-access",
+      workspaceMode: "local",
+      defaultsKey: "defaults",
+      unavailableReason: null,
+    },
+  ],
   hasMoreProjects: false,
   detail: {
     environmentId: "remote",
@@ -56,6 +71,25 @@ const fixture = {
 } satisfies WatchSnapshot;
 
 describe("phone–watch protocol", () => {
+  it("accepts selected starred models and older project snapshots", () => {
+    expect(
+      decodeRequest({
+        version: 1,
+        id: "create-request",
+        createdAt: fixture.updatedAt,
+        type: "create",
+        environmentId: "remote",
+        projectId: "project",
+        defaultsKey: "defaults",
+        modelKey: "codex:starred",
+        text: "Start here",
+      }),
+    ).toMatchObject({ modelKey: "codex:starred" });
+    const { models: _models, defaultModelKey: _key, ...legacyProject } = fixture.projects[0]!;
+    expect(decodeSnapshot({ ...fixture, projects: [legacyProject] }).projects[0]?.model).toBe(
+      "starred",
+    );
+  });
   it("bounds Unicode-heavy updates while keeping older conversation pages reachable", () => {
     const payload = encodeWatchSnapshot({
       ...fixture,

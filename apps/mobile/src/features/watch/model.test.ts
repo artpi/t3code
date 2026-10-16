@@ -1,5 +1,34 @@
 import { describe, expect, it } from "vite-plus/test";
-import { deliveryOutcome, watchMessagePage, watchPageLimit, watchPageOffset } from "./model";
+import { RunId } from "@t3tools/contracts";
+import {
+  deliveryOutcome,
+  watchMessagePage,
+  watchPageLimit,
+  watchPageOffset,
+  watchThreadActivityAt,
+} from "./model";
+
+it("dates threads by the last completed turn, with activity fallbacks for active and new threads", () => {
+  const thread = {
+    createdAt: "2026-10-10T10:00:00Z",
+    latestUserMessageAt: "2026-10-12T10:00:00Z",
+    latestRun: null,
+  };
+  const run = {
+    runId: RunId.make("run"),
+    status: "completed" as const,
+    requestedAt: "2026-10-13T10:00:00Z",
+    startedAt: "2026-10-13T10:01:00Z",
+    completedAt: "2026-10-13T10:05:00Z",
+    assistantMessageId: null,
+  };
+  expect(watchThreadActivityAt({ ...thread, latestRun: run })).toBe(run.completedAt);
+  expect(watchThreadActivityAt({ ...thread, latestRun: { ...run, completedAt: null } })).toBe(
+    run.startedAt,
+  );
+  expect(watchThreadActivityAt(thread)).toBe(thread.latestUserMessageAt);
+  expect(watchThreadActivityAt({ ...thread, latestUserMessageAt: null })).toBe(thread.createdAt);
+});
 
 describe("Watch conversation pagination", () => {
   it("can read a very large response completely in bounded pages", () => {

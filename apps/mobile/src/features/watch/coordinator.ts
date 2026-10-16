@@ -20,6 +20,8 @@ import {
 } from "@t3tools/contracts/watch-companion";
 import { resolveNewThreadEnvMode, resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { parseT3ProjectFile } from "@t3tools/shared/t3ProjectFile";
+import { resolveModelPreferences } from "@t3tools/shared/serverSettings";
+import { mobilePreferencesAtom } from "../../state/preferences";
 import { appAtomRegistry as registry } from "../../state/atom-registry";
 import { environmentProjects, projectEnvironment } from "../../state/projects";
 import {
@@ -44,7 +46,9 @@ import {
   buildModelOptions,
   resolveDefaultableModelSelection,
   resolveNewTaskModelSelection,
+  type ModelOption,
 } from "../../lib/modelOptions";
+import { watchStarredModels, resolveWatchModel } from "./models";
 import { WatchJournal } from "./journal";
 import {
   deliveryOutcome,
@@ -52,6 +56,7 @@ import {
   watchPageLimit,
   watchPageOffset,
   watchThreadStatus,
+  watchThreadActivityAt,
   encodeWatchSnapshot,
 } from "./model";
 import { watchNative } from "./native";
@@ -95,6 +100,7 @@ export async function startWatchCoordinator(): Promise<() => void> {
       get(threadEnvironment.snapshotAtom(recovery.environmentId));
     }
     const projects = get(environmentProjects.projectsAtom);
+    const preferences = Option.getOrNull(AsyncResult.value(get(mobilePreferencesAtom)));
     const shells = get(environmentThreadShells.navigationThreadShellsAtom);
     const presentations = get(environmentPresentations.presentationsAtom);
     // Grants can change without a shell/config change.
@@ -125,6 +131,7 @@ export async function startWatchCoordinator(): Promise<() => void> {
       string,
       {
         row: WatchProject;
+        models: ReadonlyArray<ModelOption>;
         message: Omit<
           QueuedThreadMessage,
           "threadId" | "messageId" | "commandId" | "text" | "createdAt"
@@ -156,6 +163,7 @@ export async function startWatchCoordinator(): Promise<() => void> {
       let runtimeMode = "full-access";
       let branch: string | null = null;
       let defaultsKey = "";
+      let models: ReadonlyArray<ModelOption> = [];
       if (config && isSelected && !unavailableReason) {
         if (!readEnvironmentScope(project.environmentId, AuthFilesystemReadScope))
           unavailableReason = "Project settings require file access on your iPhone";
@@ -194,11 +202,12 @@ export async function startWatchCoordinator(): Promise<() => void> {
             resolved.settings.defaultModelSelection,
             project.id,
           );
+          const modelOptions = buildModelOptions(config, preferred, undefined, project.id);
           modelSelection = resolveNewTaskModelSelection({
             draftSelection: null,
             stickySelection: null,
             projectDefaultSelection: preferred,
-            modelOptions: buildModelOptions(config, preferred, undefined, project.id),
+            modelOptions,
           });
           mode =
             project.isScratch || refs?.isRepo === false
@@ -213,6 +222,13 @@ export async function startWatchCoordinator(): Promise<() => void> {
                   ),
                 });
           runtimeMode = resolved.settings.defaultRuntimeMode;
+          models = watchStarredModels(
+            modelOptions,
+            resolveModelPreferences(config.settings, {
+              favorites: preferences?.modelFavorites ?? [],
+            }).favorites,
+            resolved.settings.defaultRuntimeMode,
+          );
           const preferredBranch =
             refs?.refs.find((ref) => ref.isDefault) ?? refs?.refs.find((ref) => ref.current);
           branch =
@@ -247,12 +263,17 @@ export async function startWatchCoordinator(): Promise<() => void> {
               title: project.title,
               environmentTitle: presentation?.entry.target.label ?? "Environment",
               model: modelSelection.model,
+              defaultModelKey: `${modelSelection.instanceId}:${modelSelection.model}`,
+              models: models.map((option) => ({
+                key: option.key,
+                label: `${option.label} · ${option.providerLabel}`,
+              })),
               runtimeMode,
               workspaceMode: mode,
               defaultsKey,
               unavailableReason,
             };
-            prepared.set(`${project.environmentId}:${project.id}`, { row, message });
+            prepared.set(`${project.environmentId}:${project.id}`, { row, message, models });
           }
         }
       }
@@ -262,6 +283,13 @@ export async function startWatchCoordinator(): Promise<() => void> {
         title: project.title,
         environmentTitle: presentation?.entry.target.label ?? "Environment",
         model: modelSelection?.model ?? "",
+        ...(modelSelection
+          ? { defaultModelKey: `${modelSelection.instanceId}:${modelSelection.model}` }
+          : {}),
+        models: models.map((option) => ({
+          key: option.key,
+          label: `${option.label} · ${option.providerLabel}`,
+        })),
         runtimeMode,
         workspaceMode: mode,
         defaultsKey,
@@ -326,6 +354,7 @@ export async function startWatchCoordinator(): Promise<() => void> {
             ? watchThreadStatus(row)
             : "Offline · " + watchThreadStatus(row),
         updatedAt: row.updatedAt,
+        lastActivityAt: watchThreadActivityAt(row),
         canReply: readEnvironmentScope(row.environmentId, AuthOrchestrationOperateScope),
       })),
       threadOffset,
@@ -509,6 +538,11 @@ export async function startWatchCoordinator(): Promise<() => void> {
             );
           message = {
             ...project.message,
+            modelSelection: resolveWatchModel(
+              request.modelKey,
+              project.models,
+              project.message.modelSelection,
+            ),
             threadId: ThreadId.make(`watch-${request.id}`),
             messageId: MessageId.make(`watch-${request.id}`),
             commandId: CommandId.make(`watch-${request.id}`),
