@@ -1,7 +1,7 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
 import { useEffect, useState } from "react";
-import { View } from "react-native";
+import { Keyboard, View } from "react-native";
 
 import { AppText as Text, AppTextInput } from "../../../components/AppText";
 import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../../state/preferences";
@@ -42,6 +42,7 @@ export function VoiceTranscriptionSettings() {
   }, []);
 
   const updateKey = async (remove: boolean) => {
+    Keyboard.dismiss();
     setBusy(true);
     setError(null);
     try {
@@ -99,6 +100,7 @@ export function VoiceTranscriptionSettings() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 autoComplete="off"
+                textContentType="none"
                 editable={!busy}
               />
             </View>

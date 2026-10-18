@@ -147,6 +147,7 @@ export function SettingsMicrophoneRouteScreen() {
   return (
     <View collapsable={false} className="flex-1 bg-sheet">
       <ScrollView
+        keyboardShouldPersistTaps="handled"
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
         className="flex-1"
