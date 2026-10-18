@@ -170,6 +170,17 @@ describe("mobile connection storage", () => {
     warn.mockRestore();
   });
 
+  it("persists the transcription provider and ignores unknown values", async () => {
+    await savePreferencesPatch({ voiceTranscriptionProvider: "whisper" });
+    await expect(loadPreferences()).resolves.toMatchObject({
+      voiceTranscriptionProvider: "whisper",
+    });
+    await savePreferencesPatch({ voiceTranscriptionProvider: "apple" });
+    await expect(loadPreferences()).resolves.toMatchObject({ voiceTranscriptionProvider: "apple" });
+    mocks.setPreferencesJson(JSON.stringify({ voiceTranscriptionProvider: "unknown" }), Date.now());
+    await expect(loadPreferences()).resolves.toEqual({});
+  });
+
   it("loads legacy preferences when SQLite is unavailable", async () => {
     mocks.setDatabaseFailures(true, true);
     await mocks.setItemAsync("t3code.preferences", JSON.stringify({ baseFontSize: 17 }));

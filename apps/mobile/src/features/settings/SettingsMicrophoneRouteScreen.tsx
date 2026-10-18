@@ -3,7 +3,7 @@ import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
 import { getRecordingPermissionsAsync, requestRecordingPermissionsAsync } from "expo-audio";
 import { useCallback, useEffect, useState } from "react";
-import { AppState, Linking, Pressable, View } from "react-native";
+import { AppState, Linking, Platform, Pressable, View } from "react-native";
 import Reanimated, { ReduceMotion, useAnimatedStyle, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -21,6 +21,7 @@ import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/
 import { SettingsActionRow } from "./components/SettingsActionRow";
 import { SettingsDragHandle } from "./components/SettingsDragHandle";
 import { SettingsSection } from "./components/SettingsSection";
+import { VoiceTranscriptionSettings } from "./components/VoiceTranscriptionSettings";
 
 const REMOVE_SIZE = 20;
 
@@ -170,6 +171,7 @@ export function SettingsMicrophoneRouteScreen() {
             </Text>
           </>
         ) : null}
+        {Platform.OS === "ios" ? <VoiceTranscriptionSettings /> : null}
         <SettingsSection
           title="Preferred order"
           trailing={
