@@ -169,12 +169,13 @@ and use **Attach again** or remove the missing file before sending.
 
 ## Voice input on iPhone
 
-On supported iPhones with iOS 26 or later, use the composer's microphone to record,
+On iPhone, use the composer's microphone to record,
 then confirm to transcribe. Text is inserted where your selection was when
 recording started, ready for you to review and edit before sending.
 
-The first use may download Apple's speech model and needs a network connection.
-Later transcription works offline for that language. Recordings can be up to five
+Apple transcription is the default and requires a supported iPhone with iOS 26 or
+later. The first use may download Apple's speech model and needs a network
+connection. Later transcription works offline for that language. Recordings can be up to five
 minutes long. Canceling, leaving the screen, or an audio interruption discards the
 recording and preserves your existing draft. While recording, the screen stays
 awake; it can sleep normally once recording stops.
@@ -186,8 +187,18 @@ for example, put **Other Bluetooth** above your AirPods so a new headset is pref
 while the AirPods microphone stays low. By default, CarPlay comes after the built-in
 microphone.
 
-Transcription runs on your device. T3 Code deletes the temporary audio after
-transcription or cancellation; only the message text is sent when you submit.
+For experimental OpenAI Whisper transcription, select it in **Settings → Microphone**
+and save your OpenAI API key. Whisper detects the language automatically; there is
+no language setting, so you can dictate in Polish, English, or a mixture. Recordings
+are sent directly to OpenAI and require an internet connection. API usage is billed
+separately from ChatGPT. The key stays in this iPhone's Keychain; you can replace or
+delete it in the same settings, or switch back to Apple for on-device transcription.
+The paired Apple Watch follows this choice; see [Apple Watch](apple-watch.md).
+To support transcription while the phone is locked, the saved key becomes available
+after the first unlock following each restart.
+
+T3 Code deletes temporary audio after transcription or cancellation. The resulting
+text is sent to your coding provider only when you submit the message.
 
 ## Queued messages
 

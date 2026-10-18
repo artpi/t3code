@@ -27,5 +27,19 @@ automatically checks delivery without sending a second copy. A queued message ca
 cancelled until delivery starts. Failed or cancelled submissions keep the draft.
 
 Cached content remains readable during disconnection. Open T3 Code on your
-iPhone if the watch asks you to reconnect or refresh. Dictation availability
-depends on the language and system input methods supported by your watch.
+iPhone if the watch asks you to reconnect or refresh. Apple dictation availability depends on the language and system input methods
+supported by your watch.
+
+To use Whisper, select **OpenAI Whisper** and save your API key in the iPhone’s
+**Settings → Microphone**. The watch follows that choice automatically. In a reply
+or new thread, choose **Record with Whisper**, finish recording, then review the
+transcript and choose **Use text**. Review your draft before sending. Languages
+are detected automatically, including mixed Polish and English.
+
+Recordings last up to five minutes. The watch saves a finished recording while it
+waits for the phone; return to **Review recording** to use, retry, or discard it.
+Leaving the recording screen or backgrounding the watch app cancels an unfinished
+recording. Audio goes through the iPhone to OpenAI; the API key stays on the phone.
+The phone can upload while locked after its first unlock following a restart.
+Transfers may be delayed, and force-quitting the phone app can require reopening it.
+Whisper usage is billed separately from ChatGPT.

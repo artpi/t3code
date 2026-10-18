@@ -10,7 +10,11 @@ import {
   type VoiceInputControllerDependencies,
   type VoiceRecorder,
 } from "./controller.ts";
-import type { PreparedVoiceTranscription, VoiceTranscriber } from "./transcription.ts";
+import {
+  VoiceTranscriptionError,
+  type PreparedVoiceTranscription,
+  type VoiceTranscriber,
+} from "./transcription.ts";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -131,6 +135,19 @@ describe("resolveTranscriptCommit", () => {
     expect(resolveTranscriptCommit(inMiddle, inMiddle, "also", "en-US")).toMatchObject({
       kind: "commit",
       text: "Fix also cache.",
+    });
+  });
+
+  it.each(["pl-PL", "en-US"])("keeps word boundaries around Polish letters for %s", (locale) => {
+    const end = draft({ text: "Zmień tę", selection: { start: 8, end: 8 } });
+    expect(resolveTranscriptCommit(end, end, "funkcję and add tests", locale)).toMatchObject({
+      kind: "commit",
+      text: "Zmień tę funkcję and add tests",
+    });
+    const start = draft({ text: "źródło", selection: { start: 0, end: 0 } });
+    expect(resolveTranscriptCommit(start, start, "Update", locale)).toMatchObject({
+      kind: "commit",
+      text: "Update źródło",
     });
   });
 
@@ -637,4 +654,27 @@ describe("VoiceInputController", () => {
     expect(harness.recorder.record).not.toHaveBeenCalled();
     expect(harness.controller.currentState.error).toContain("background");
   });
+});
+
+describe("transcription error messages", () => {
+  beforeEach(() => resetVoiceInputGlobalsForTests());
+
+  it.each(["prepare", "transcribe"] as const)(
+    "shows actionable adapter errors during %s",
+    async (phase) => {
+      const message = "Update your OpenAI API key in Settings → Microphone.";
+      const fail = async () => {
+        throw new VoiceTranscriptionError("transcription-failed", message);
+      };
+      const harness = createHarness({
+        getTranscriber: () => ({
+          prepare: phase === "prepare" ? fail : async () => preparedTranscription(fail),
+        }),
+      });
+      await harness.controller.start();
+      if (phase === "transcribe") await harness.controller.stop();
+      expect(harness.controller.currentState).toMatchObject({ phase: "error", error: message });
+      expect(harness.commits).toEqual([]);
+    },
+  );
 });

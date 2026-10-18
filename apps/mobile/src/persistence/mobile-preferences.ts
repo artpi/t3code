@@ -76,6 +76,7 @@ export interface Preferences {
   readonly followUpBehavior?: FollowUpBehavior;
   /** Microphone kinds and remembered devices, most preferred first. iOS only. */
   readonly microphones?: ReadonlyArray<MicrophoneEntry>;
+  readonly voiceTranscriptionProvider?: "apple" | "whisper";
   /** @deprecated Kept temporarily so older OTA bundles retain the selected mode. */
   readonly projectGroupingEnabled?: boolean;
   readonly projectGroupingMode?: SidebarProjectGroupingMode;
@@ -153,6 +154,7 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     composerEnterBehavior?: ComposerEnterBehavior;
     followUpBehavior?: FollowUpBehavior;
     microphones?: ReadonlyArray<MicrophoneEntry>;
+    voiceTranscriptionProvider?: "apple" | "whisper";
     projectGroupingEnabled?: boolean;
     projectGroupingMode?: SidebarProjectGroupingMode;
     planModeEnabled?: boolean;
@@ -231,6 +233,12 @@ function sanitizePreferences(parsed: Preferences): Preferences {
   }
   if (parsed.followUpBehavior === "queue" || parsed.followUpBehavior === "steer") {
     preferences.followUpBehavior = parsed.followUpBehavior;
+  }
+  if (
+    parsed.voiceTranscriptionProvider === "apple" ||
+    parsed.voiceTranscriptionProvider === "whisper"
+  ) {
+    preferences.voiceTranscriptionProvider = parsed.voiceTranscriptionProvider;
   }
   if (Array.isArray(parsed.microphones)) {
     preferences.microphones = parsed.microphones.flatMap((entry): MicrophoneEntry[] => {
