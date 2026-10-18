@@ -1,4 +1,6 @@
 import * as SecureStore from "expo-secure-store";
+import { File } from "expo-file-system";
+import { fetch } from "expo/fetch";
 
 import {
   VoiceTranscriptionError,
@@ -78,8 +80,8 @@ export const whisperTranscriber: VoiceTranscriber = {
       async transcribe(uri, { signal }) {
         throwIfVoiceTranscriptionAborted(signal);
         const body = new FormData();
-        // React Native streams this file part from its URI. The recorder produces M4A.
-        body.append("file", { uri, name: "recording.m4a", type: "audio/mp4" } as unknown as Blob);
+        // Expo fetch requires a File/Blob; React Native URI descriptors fail before upload.
+        body.append("file", new File(uri));
         body.append("model", "whisper-1");
         body.append("response_format", "json");
         // Leave language and prompt unset to allow automatic detection and mixed languages.

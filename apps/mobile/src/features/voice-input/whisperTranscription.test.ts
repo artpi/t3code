@@ -8,6 +8,16 @@ const storage = vi.hoisted(() => ({
 }));
 vi.mock("expo-secure-store", () => storage);
 vi.mock("../watch/native", () => ({ watchNative: null }));
+vi.mock("expo/fetch", () => ({ fetch: (...args: Parameters<typeof fetch>) => request(...args) }));
+vi.mock("expo-file-system", () => ({
+  File: class extends Blob {
+    readonly name: string;
+    constructor(uri: string) {
+      super(["recorded-audio"], { type: "audio/mp4" });
+      this.name = uri.split("/").at(-1)!;
+    }
+  },
+}));
 
 import {
   deleteWhisperApiKey,
@@ -17,22 +27,11 @@ import {
 } from "./whisperTranscription";
 
 const request = vi.fn<typeof fetch>();
-let parts: Map<string, unknown>;
 const options = () => ({ signal: new AbortController().signal });
 
 beforeEach(() => {
   vi.resetAllMocks();
   storage.getItemAsync.mockResolvedValue("test-api-key");
-  vi.stubGlobal("fetch", request);
-  parts = new Map();
-  vi.stubGlobal(
-    "FormData",
-    class {
-      append(name: string, value: unknown) {
-        parts.set(name, value);
-      }
-    },
-  );
   request.mockResolvedValue(
     new Response(JSON.stringify({ text: "  Cześć, let's fix ten bug.  " })),
   );
@@ -46,13 +45,15 @@ describe("Whisper transcription", () => {
     await expect(prepared.transcribe("file:///recording.m4a", { signal })).resolves.toBe(
       "Cześć, let's fix ten bug.",
     );
-    expect(parts).toEqual(
-      new Map<string, unknown>([
-        ["file", { uri: "file:///recording.m4a", name: "recording.m4a", type: "audio/mp4" }],
-        ["model", "whisper-1"],
-        ["response_format", "json"],
-      ]),
-    );
+    const body = request.mock.calls[0]![1]!.body as FormData;
+    const file = body.get("file");
+    expect(file).toBeInstanceOf(Blob);
+    expect(await (file as Blob).text()).toBe("recorded-audio");
+    expect((file as Blob).type).toBe("audio/mp4");
+    expect(body.get("model")).toBe("whisper-1");
+    expect(body.get("response_format")).toBe("json");
+    expect(body.has("language")).toBe(false);
+    expect(body.has("prompt")).toBe(false);
     expect(request).toHaveBeenCalledWith("https://api.openai.com/v1/audio/transcriptions", {
       method: "POST",
       body: expect.anything(),
