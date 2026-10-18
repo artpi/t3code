@@ -6,11 +6,20 @@ import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { describe, expect, it } from "@effect/vitest";
-import { WatchRequest, WatchSnapshot } from "@t3tools/contracts/watch-companion";
+import {
+  WatchRequest,
+  WatchSnapshot,
+  WatchTranscriptionContext,
+  WatchAudioTransferMetadata,
+  WatchTranscriptionControl,
+} from "@t3tools/contracts/watch-companion";
 import { encodeWatchSnapshot } from "./model";
 
 const decodeRequest = Schema.decodeUnknownSync(WatchRequest);
 const decodeSnapshot = Schema.decodeUnknownSync(WatchSnapshot);
+const decodeTranscription = Schema.decodeUnknownSync(WatchTranscriptionContext);
+const decodeAudio = Schema.decodeUnknownSync(WatchAudioTransferMetadata);
+const decodeTranscriptionControl = Schema.decodeUnknownSync(WatchTranscriptionControl);
 const fixture = {
   version: 1,
   updatedAt: "2026-10-15T10:00:00.000Z",
@@ -71,6 +80,53 @@ const fixture = {
 } satisfies WatchSnapshot;
 
 describe("phone–watch protocol", () => {
+  it("validates native transcription metadata without requiring a thread snapshot", () => {
+    expect(
+      decodeTranscription({
+        voiceTranscription: { provider: "whisper", ready: true },
+        transcriptions: [
+          {
+            id: "recording",
+            draftKey: "new-thread",
+            status: "ready",
+            text: "Zmień tę funkcję and add tests.",
+          },
+        ],
+      }).transcriptions[0]?.text,
+    ).toBe("Zmień tę funkcję and add tests.");
+    expect(() =>
+      decodeTranscription({
+        voiceTranscription: { provider: "unknown", ready: true },
+        transcriptions: [],
+      }),
+    ).toThrow();
+    expect(() =>
+      decodeTranscription({
+        voiceTranscription: { provider: "apple", ready: false },
+        transcriptions: [{ id: "recording", status: "unknown" }],
+      }),
+    ).toThrow();
+  });
+
+  it("validates file metadata and native cancellation independently of thread commands", () => {
+    const id = "C27799E9-8789-4B41-97AC-B30AD4FAE7E8";
+    const metadata = { kind: "whisper-audio-v1", id, draftKey: "new-thread", createdAt: 123 };
+    expect(decodeAudio(metadata)).toEqual(metadata);
+    expect(() => decodeAudio({ ...metadata, id: "../../audio" })).toThrow();
+    expect(
+      decodeTranscriptionControl({
+        version: 1,
+        id,
+        createdAt: fixture.updatedAt,
+        type: "cancelTranscription",
+        requestId: id,
+      }),
+    ).toMatchObject({ requestId: id });
+    expect(decodeTranscriptionControl({ type: "transcriptionStatus" })).toEqual({
+      type: "transcriptionStatus",
+    });
+  });
+
   it("accepts selected starred models and older project snapshots", () => {
     expect(
       decodeRequest({
@@ -146,6 +202,10 @@ describe("phone–watch protocol", () => {
               "swiftc",
               NodePath.join(targets, "watch/WatchModels.swift"),
               NodePath.join(targets, "watch-tests/ProtocolTests.swift"),
+              NodePath.join(
+                targets,
+                "../modules/t3-watch-connectivity/ios/WatchWhisperUpload.swift",
+              ),
               "-o",
               binary,
             ],

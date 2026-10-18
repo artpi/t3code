@@ -4,7 +4,7 @@ module.exports = (config) => ({
   displayName: config.name,
   bundleIdentifier: ".watch",
   deploymentTarget: "11.0",
-  frameworks: ["SwiftUI", "WatchConnectivity"],
+  frameworks: ["SwiftUI", "WatchConnectivity", "AVFoundation"],
   icon: require("node:path").relative(
     __dirname,
     require("node:path").resolve(__dirname, "../..", config.icon),

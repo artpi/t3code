@@ -4,11 +4,17 @@ const storage = vi.hoisted(() => ({
   getItemAsync: vi.fn(),
   setItemAsync: vi.fn(),
   deleteItemAsync: vi.fn(),
-  WHEN_UNLOCKED_THIS_DEVICE_ONLY: "when-unlocked-this-device-only",
+  AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: "after-first-unlock-this-device-only",
 }));
 vi.mock("expo-secure-store", () => storage);
+vi.mock("../watch/native", () => ({ watchNative: null }));
 
-import { deleteWhisperApiKey, saveWhisperApiKey, whisperTranscriber } from "./whisperTranscription";
+import {
+  deleteWhisperApiKey,
+  loadWhisperApiKey,
+  saveWhisperApiKey,
+  whisperTranscriber,
+} from "./whisperTranscription";
 
 const request = vi.fn<typeof fetch>();
 let parts: Map<string, unknown>;
@@ -53,6 +59,40 @@ describe("Whisper transcription", () => {
       headers: { Authorization: "Bearer test-api-key" },
       signal,
     });
+  });
+
+  it("migrates an existing key to access after the first unlock", async () => {
+    await expect(loadWhisperApiKey()).resolves.toBe("test-api-key");
+    expect(storage.setItemAsync).toHaveBeenCalledWith(
+      "t3code.voice-input.openai-api-key",
+      "test-api-key",
+      {
+        keychainAccessible: storage.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+      },
+    );
+  });
+
+  it("serializes key migration with replacement and deletion", async () => {
+    let resolve!: (key: string) => void;
+    storage.getItemAsync.mockReturnValueOnce(
+      new Promise<string>((done) => {
+        resolve = done;
+      }),
+    );
+    const loading = loadWhisperApiKey();
+    const replacement = saveWhisperApiKey("replacement");
+    const deletion = deleteWhisperApiKey();
+    await Promise.resolve();
+    expect(storage.setItemAsync).not.toHaveBeenCalled();
+    resolve("old-key");
+    await Promise.all([loading, replacement, deletion]);
+    expect(storage.setItemAsync.mock.calls.map((call) => call[1])).toEqual([
+      "old-key",
+      "replacement",
+    ]);
+    expect(storage.deleteItemAsync.mock.invocationCallOrder[0]).toBeGreaterThan(
+      storage.setItemAsync.mock.invocationCallOrder[1]!,
+    );
   });
 
   it("captures the API key before recording", async () => {
@@ -132,7 +172,7 @@ describe("Whisper transcription", () => {
       "t3code.voice-input.openai-api-key",
       "replacement-key",
       {
-        keychainAccessible: storage.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+        keychainAccessible: storage.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
       },
     );
     expect(storage.deleteItemAsync).toHaveBeenCalledWith("t3code.voice-input.openai-api-key");

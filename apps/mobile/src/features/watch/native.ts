@@ -4,6 +4,8 @@ import { Platform } from "react-native";
 type WatchEvents = { onRequestsChanged: () => void };
 interface WatchNativeModule extends NativeModule<WatchEvents> {
   isEnabled(): Promise<boolean>;
+  configureTranscription?(enabled: boolean): Promise<void>;
+  refreshTranscription?(): Promise<void>;
   pendingRequests(): Promise<ReadonlyArray<unknown>>;
   finish(id: string): Promise<void>;
   setWorkPending(pending: boolean): Promise<void>;

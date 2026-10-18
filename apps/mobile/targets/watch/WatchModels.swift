@@ -234,3 +234,46 @@ func submissionDeliveryLabel(_ outcome: WatchOutcome?, threadStatus: String) -> 
   }
 }
 
+
+struct WatchVoiceConfiguration: Codable, Equatable {
+  let provider: String
+  let ready: Bool
+}
+struct WatchTranscriptionJob: Codable, Equatable {
+  var id: String
+  let draftKey: String
+  let fileName: String
+  let originalText: String
+  var createdAt: Double
+  var status: String
+  var text: String?
+  var error: String?
+}
+
+/// Review never overwrites edits made while the phone was transcribing.
+func mergeWatchTranscript(_ transcript: String, original: String, current: String) -> String? {
+  guard original == current else { return nil }
+  let text = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+  guard !text.isEmpty else { return nil }
+  if original.isEmpty || original.last?.isWhitespace == true { return original + text }
+  return original + " " + text
+}
+
+struct WatchTranscriptionResult: Codable {
+  let id: String
+  let draftKey: String?
+  let status: String
+  let text: String?
+  let error: String?
+}
+
+func applyingWatchTranscriptionResult(_ result: WatchTranscriptionResult, to job: WatchTranscriptionJob) -> WatchTranscriptionJob {
+  guard result.id == job.id, result.draftKey == nil || result.draftKey == job.draftKey,
+        ["transcribing", "ready", "failed", "cancelled"].contains(result.status),
+        !["ready", "failed"].contains(job.status) else { return job }
+  var next = job
+  next.status = result.status == "cancelled" ? "failed" : result.status
+  next.text = result.text
+  next.error = result.status == "cancelled" ? "Recording was cancelled. Retry or discard it." : result.error
+  return next
+}

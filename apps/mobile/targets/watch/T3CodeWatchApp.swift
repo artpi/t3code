@@ -159,12 +159,14 @@ struct ThreadView: View {
           Text(displayedStatus).font(.caption).foregroundStyle(statusColor(liveStatus))
         }
         .id("thread-top")
-        TextFieldLink(prompt: Text("Respond")) {
-          Label("Respond", systemImage: "mic")
-        } onSubmit: { text in
-          store.respond(text: text, thread: thread)
+        if store.voiceConfiguration?.provider == "whisper" || store.transcription?.draftKey == "thread." + thread.id {
+          NavigationLink { ComposeView(thread: thread) } label: { Label("Respond", systemImage: "mic") }
+            .disabled(!(detail?.canReply ?? thread.canReply) || store.pending != nil)
+        } else {
+          TextFieldLink(prompt: Text("Respond")) { Label("Respond", systemImage: "mic") }
+            onSubmit: { text in store.respond(text: text, thread: thread) }
+            .disabled(!(detail?.canReply ?? thread.canReply) || store.pending != nil)
         }
-        .disabled(!(detail?.canReply ?? thread.canReply) || store.pending != nil)
         if let reply {
           VStack(alignment: .leading, spacing: 5) {
             Text("You").font(.caption2).foregroundStyle(.blue)
@@ -278,7 +280,15 @@ struct ComposeView: View {
       }
       TextField("Dictate a message", text: $text, axis: .vertical)
         .accessibilityIdentifier("watch.message")
-      Text("Use the microphone in text entry, then review your message here.").font(.caption2).foregroundStyle(.secondary)
+      if store.voiceConfiguration?.provider == "whisper" || store.transcription?.draftKey == draftKey {
+        NavigationLink {
+          WatchWhisperView(text: $text, draftKey: draftKey)
+        } label: {
+          Label(store.transcription?.draftKey == draftKey ? "Review recording" : "Record with Whisper", systemImage: "mic.fill")
+        }
+      } else {
+        Text("Use the microphone in text entry, then review your message here.").font(.caption2).foregroundStyle(.secondary)
+      }
       if let project = currentProject {
         if let reason = project.unavailableReason {
           Text(reason).font(.caption).foregroundStyle(.orange)

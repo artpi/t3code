@@ -3,6 +3,37 @@ import Foundation
 @main
 struct ProtocolTests {
   static func main() throws {
+    precondition(mergeWatchTranscript("  funkcję and add tests  ", original: "Zmień tę", current: "Zmień tę") == "Zmień tę funkcję and add tests")
+    precondition(mergeWatchTranscript("hello", original: "", current: "edited while waiting") == nil)
+    precondition(mergeWatchTranscript(" ", original: "draft", current: "draft") == nil)
+    precondition(mergeWatchTranscript("hello", original: "", current: "") == "hello")
+    let voiceJob = WatchTranscriptionJob(id: "job", draftKey: "new-thread", fileName: "audio.m4a", originalText: "draft", createdAt: 0, status: "queued")
+    let transcriptResult = WatchTranscriptionResult(id: "job", draftKey: "new-thread", status: "ready", text: "Cześć, hello", error: nil)
+    let readyJob = applyingWatchTranscriptionResult(transcriptResult, to: voiceJob)
+    precondition(readyJob.status == "ready" && readyJob.text == "Cześć, hello")
+    precondition(applyingWatchTranscriptionResult(WatchTranscriptionResult(id: "job", draftKey: nil, status: "transcribing", text: nil, error: nil), to: readyJob) == readyJob)
+    precondition(applyingWatchTranscriptionResult(WatchTranscriptionResult(id: "old-job", draftKey: nil, status: "ready", text: "stale", error: nil), to: voiceJob) == voiceJob)
+    precondition(applyingWatchTranscriptionResult(WatchTranscriptionResult(id: "job", draftKey: "other-draft", status: "ready", text: "stale", error: nil), to: voiceJob) == voiceJob)
+    precondition(applyingWatchTranscriptionResult(WatchTranscriptionResult(id: "job", draftKey: nil, status: "cancelled", text: nil, error: nil), to: voiceJob).status == "failed")
+    let uploadDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: uploadDirectory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: uploadDirectory) }
+    let audioURL = uploadDirectory.appendingPathComponent("audio.m4a")
+    let uploadURL = uploadDirectory.appendingPathComponent("upload")
+    let audioBytes = Data([0, 1, 255, 13, 10])
+    try audioBytes.write(to: audioURL)
+    try makeWatchWhisperUpload(audio: audioURL, output: uploadURL, boundary: "test-boundary")
+    let multipart = try Data(contentsOf: uploadURL)
+    precondition(multipart.range(of: audioBytes) != nil)
+    let readable = String(decoding: multipart, as: UTF8.self)
+    precondition(readable.contains("whisper-1"))
+    precondition(readable.contains("filename=\"recording.m4a\""))
+    precondition(!readable.contains("name=\"language\""))
+    precondition(!readable.contains("name=\"prompt\""))
+    precondition(readable.hasSuffix("--test-boundary--\r\n"))
+    try Data().write(to: audioURL)
+    do { try makeWatchWhisperUpload(audio: audioURL, output: uploadURL, boundary: "test"); fatalError("Empty audio accepted") }
+    catch { }
     let markdown = watchMarkdownBlocks("# Heading\n\n**Bold** and `code`\n\n- First\n- Second\n\n```swift\nlet answer = 42\n```\n\n> Quote")
     precondition(markdown.map(\.style) == [.heading(1), .paragraph, .list("•"), .list("•"), .code, .quote])
     precondition(String(markdown[1].text.characters) == "Bold and code")

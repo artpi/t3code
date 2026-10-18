@@ -6,16 +6,41 @@ import {
   type VoiceTranscriber,
 } from "@t3tools/client-runtime/voice-input";
 
+import { watchNative } from "../watch/native";
+
 const API_KEY_STORAGE_KEY = "t3code.voice-input.openai-api-key";
 
-export const loadWhisperApiKey = () => SecureStore.getItemAsync(API_KEY_STORAGE_KEY);
+// Serialize migration with edits so a concurrent read cannot restore a replaced/deleted key.
+let keyOperation: Promise<unknown> = Promise.resolve();
+function withKeyStorage<T>(operation: () => Promise<T>): Promise<T> {
+  const result = keyOperation.then(operation);
+  keyOperation = result.catch(() => {});
+  return result;
+}
+const keyOptions = { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY };
+const refreshWatch = () => {
+  void watchNative?.refreshTranscription?.().catch(() => {});
+};
 
-export const saveWhisperApiKey = (key: string) =>
-  SecureStore.setItemAsync(API_KEY_STORAGE_KEY, key.trim(), {
-    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+export const loadWhisperApiKey = () =>
+  withKeyStorage(async () => {
+    const key = await SecureStore.getItemAsync(API_KEY_STORAGE_KEY);
+    // Existing iOS-only keys used WHEN_UNLOCKED; migrate them on the next successful read.
+    if (key) await SecureStore.setItemAsync(API_KEY_STORAGE_KEY, key, keyOptions);
+    return key;
   });
 
-export const deleteWhisperApiKey = () => SecureStore.deleteItemAsync(API_KEY_STORAGE_KEY);
+export const saveWhisperApiKey = (key: string) =>
+  withKeyStorage(async () => {
+    await SecureStore.setItemAsync(API_KEY_STORAGE_KEY, key.trim(), keyOptions);
+    refreshWatch();
+  });
+
+export const deleteWhisperApiKey = () =>
+  withKeyStorage(async () => {
+    await SecureStore.deleteItemAsync(API_KEY_STORAGE_KEY);
+    refreshWatch();
+  });
 
 function transcriptionFailure(status: number): string {
   if (status === 401) return "OpenAI rejected the API key. Update it in Settings → Microphone.";

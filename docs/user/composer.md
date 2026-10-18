@@ -193,6 +193,9 @@ no language setting, so you can dictate in Polish, English, or a mixture. Record
 are sent directly to OpenAI and require an internet connection. API usage is billed
 separately from ChatGPT. The key stays in this iPhone's Keychain; you can replace or
 delete it in the same settings, or switch back to Apple for on-device transcription.
+The paired Apple Watch follows this choice; see [Apple Watch](apple-watch.md).
+To support transcription while the phone is locked, the saved key becomes available
+after the first unlock following each restart.
 
 T3 Code deletes temporary audio after transcription or cancellation. The resulting
 text is sent to your coding provider only when you submit the message.

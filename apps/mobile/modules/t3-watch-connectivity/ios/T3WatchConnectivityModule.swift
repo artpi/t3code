@@ -20,11 +20,20 @@ final class T3WatchMailbox: NSObject, WCSessionDelegate {
     enabled = true
     WCSession.default.delegate = self
     WCSession.default.activate()
+    T3WatchTranscription.shared.activate()
   }
 
   var requests: [[String: Any]] { defaults.array(forKey: key) as? [[String: Any]] ?? [] }
 
   private func receive(_ request: [String: Any]) {
+    if request["type"] as? String == "cancelTranscription", let id = request["requestId"] as? String {
+      T3WatchTranscription.shared.cancel(id)
+      return
+    }
+    if request["type"] as? String == "transcriptionStatus" {
+      publishTranscription()
+      return
+    }
     guard let id = request["id"] as? String else { return }
     var pending = requests
     if !pending.contains(where: { $0["id"] as? String == id }) {
@@ -60,11 +69,25 @@ final class T3WatchMailbox: NSObject, WCSessionDelegate {
 
   func publish(_ payload: [String: Any]) throws -> Bool {
     guard enabled, WCSession.default.activationState == .activated else { return false }
+    defaults.set(payload, forKey: "t3.watch.context.v1")
+    let payload = T3WatchTranscription.shared.decorate(payload)
     try WCSession.default.updateApplicationContext(payload)
     if WCSession.default.isReachable {
       WCSession.default.sendMessage(payload, replyHandler: nil, errorHandler: { _ in })
     }
     return true
+  }
+
+  func publishTranscription() {
+    guard enabled, WCSession.default.activationState == .activated else { return }
+    let context = T3WatchTranscription.shared.decorate(defaults.dictionary(forKey: "t3.watch.context.v1") ?? [:])
+    try? WCSession.default.updateApplicationContext(context)
+    if WCSession.default.isReachable { WCSession.default.sendMessage(context, replyHandler: nil, errorHandler: { _ in }) }
+  }
+
+  func session(_ session: WCSession, didReceive file: WCSessionFile) {
+    if Thread.isMainThread { T3WatchTranscription.shared.receive(file) }
+    else { DispatchQueue.main.sync { T3WatchTranscription.shared.receive(file) } }
   }
 
   func session(_ session: WCSession, didReceiveMessage message: [String: Any],
@@ -85,16 +108,23 @@ final class T3WatchMailbox: NSObject, WCSessionDelegate {
 
   func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState,
                error: Error?) {
-    DispatchQueue.main.async { self.onChange?() }
+    DispatchQueue.main.async { self.publishTranscription(); self.onChange?() }
   }
   func sessionDidBecomeInactive(_ session: WCSession) {}
   func sessionDidDeactivate(_ session: WCSession) { session.activate() }
   func sessionReachabilityDidChange(_ session: WCSession) {
-    DispatchQueue.main.async { self.onChange?() }
+    DispatchQueue.main.async { self.publishTranscription(); self.onChange?() }
   }
 }
 
 public class T3WatchAppDelegateSubscriber: ExpoAppDelegateSubscriber {
+  public func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String,
+                          completionHandler: @escaping () -> Void) {
+    guard identifier == T3WatchTranscription.sessionID else { completionHandler(); return }
+    T3WatchTranscription.shared.backgroundCompletion = completionHandler
+    T3WatchTranscription.shared.activate()
+  }
+
   public func application(_ application: UIApplication,
                           didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
     T3WatchMailbox.shared.activate()
@@ -122,6 +152,14 @@ public class T3WatchConnectivityModule: Module {
         T3WatchMailbox.shared.observerID = nil
       }
     }
+    AsyncFunction("configureTranscription") { (enabled: Bool) in
+      guard T3WatchMailbox.shared.enabled else { return }
+      T3WatchTranscription.shared.configure(enabled: enabled)
+    }.runOnQueue(.main)
+    AsyncFunction("refreshTranscription") {
+      guard T3WatchMailbox.shared.enabled else { return }
+      T3WatchTranscription.shared.refresh()
+    }.runOnQueue(.main)
     AsyncFunction("isEnabled") { T3WatchMailbox.shared.enabled }.runOnQueue(.main)
     AsyncFunction("pendingRequests") { T3WatchMailbox.shared.requests }.runOnQueue(.main)
     AsyncFunction("finish") { (id: String) in T3WatchMailbox.shared.finish(id) }.runOnQueue(.main)

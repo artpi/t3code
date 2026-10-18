@@ -5,6 +5,8 @@ import WatchConnectivity
 // The Watch keeps drafts and a single outstanding submission across app restarts.
 // Transport receipt is distinct from the phone outbox and server acceptance.
 final class WatchStore: NSObject, ObservableObject, WCSessionDelegate {
+  @Published var voiceConfiguration: WatchVoiceConfiguration?
+  @Published var transcription: WatchTranscriptionJob?
   @Published var snapshot: WatchSnapshot?
   @Published var reachable = false
   @Published var transportError: String?
@@ -26,6 +28,8 @@ final class WatchStore: NSObject, ObservableObject, WCSessionDelegate {
 
   override init() {
     super.init()
+    if let data = defaults.data(forKey: "voiceConfiguration.v1") { voiceConfiguration = try? decoder.decode(WatchVoiceConfiguration.self, from: data) }
+    if let data = defaults.data(forKey: "transcription.v1") { transcription = try? decoder.decode(WatchTranscriptionJob.self, from: data) }
     if let data = defaults.data(forKey: "snapshot.v1") { snapshot = try? decoder.decode(WatchSnapshot.self, from: data) }
     threads = snapshot?.threads ?? []
     projects = snapshot?.projects ?? []
@@ -153,6 +157,18 @@ final class WatchStore: NSObject, ObservableObject, WCSessionDelegate {
   }
 
   private func receive(_ value: [String: Any]) {
+    if let configuration = value["voiceTranscription"],
+       let data = try? JSONSerialization.data(withJSONObject: configuration),
+       let configuration = try? decoder.decode(WatchVoiceConfiguration.self, from: data) {
+      voiceConfiguration = configuration
+      defaults.set(data, forKey: "voiceConfiguration.v1")
+    }
+    if let job = transcription, let results = value["transcriptions"],
+       let data = try? JSONSerialization.data(withJSONObject: results),
+       let decoded = try? decoder.decode([WatchTranscriptionResult].self, from: data),
+       let result = decoded.first(where: { $0.id == job.id }) {
+      saveTranscription(applyingWatchTranscriptionResult(result, to: job))
+    }
     // Immediate delivery and application context carry the same snapshot.
     // Ignore the second copy before decoding or publishing SwiftUI state.
     guard let json = value["payload"] as? String, json != lastPayload, let data = json.data(using: .utf8),
@@ -204,18 +220,91 @@ final class WatchStore: NSObject, ObservableObject, WCSessionDelegate {
     }
   }
 
+  private func saveTranscription(_ job: WatchTranscriptionJob?) {
+    transcription = job
+    if let job { defaults.set(try? encoder.encode(job), forKey: "transcription.v1") }
+    else { defaults.removeObject(forKey: "transcription.v1") }
+  }
+  private var recordingsDirectory: URL {
+    FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+  }
+  func startTranscription(audio: URL, draftKey: String, originalText: String) throws {
+    guard transcription == nil else { return }
+    let id = UUID().uuidString
+    let name = "whisper-" + id + ".m4a"
+    let destination = recordingsDirectory.appendingPathComponent(name)
+    try FileManager.default.copyItem(at: audio, to: destination)
+    let job = WatchTranscriptionJob(id: id, draftKey: draftKey, fileName: name,
+      originalText: originalText, createdAt: Date().timeIntervalSince1970, status: "queued")
+    saveTranscription(job)
+    transferRecording(job)
+  }
+  private func transferRecording(_ job: WatchTranscriptionJob) {
+    guard Date().timeIntervalSince1970 - job.createdAt < 86400 else {
+      var expired = job; expired.status = "failed"; expired.error = "The transfer expired. Retry or discard your recording."
+      saveTranscription(expired); return
+    }
+    let session = WCSession.default
+    guard session.activationState == .activated else { return }
+    guard !session.outstandingFileTransfers.contains(where: { $0.file.metadata?["id"] as? String == job.id }) else { return }
+    let url = recordingsDirectory.appendingPathComponent(job.fileName)
+    guard FileManager.default.fileExists(atPath: url.path) else {
+      var failed = job; failed.status = "failed"; failed.error = "Recording is missing. Record again."
+      saveTranscription(failed); return
+    }
+    session.transferFile(url, metadata: ["kind": "whisper-audio-v1", "id": job.id,
+      "draftKey": job.draftKey, "createdAt": job.createdAt])
+  }
+  func refreshTranscription() {
+    guard let job = transcription else { return }
+    if job.status == "queued" { transferRecording(job) }
+    send(["type": "transcriptionStatus"], allowQueue: false)
+  }
+  func retryTranscription() {
+    guard var job = transcription else { return }
+    cancelTranscriptionTransport(job.id)
+    job.id = UUID().uuidString
+    job.createdAt = Date().timeIntervalSince1970
+    job.status = "queued"; job.error = nil; job.text = nil
+    saveTranscription(job)
+    transferRecording(job)
+  }
+  private func cancelTranscriptionTransport(_ id: String) {
+    for transfer in WCSession.default.outstandingFileTransfers where transfer.file.metadata?["id"] as? String == id { transfer.cancel() }
+    send(["version": 1, "id": UUID().uuidString, "type": "cancelTranscription", "requestId": id,
+      "createdAt": ISO8601DateFormatter().string(from: Date())], allowQueue: true)
+  }
+  func discardTranscription() {
+    guard let job = transcription else { return }
+    cancelTranscriptionTransport(job.id)
+    try? FileManager.default.removeItem(at: recordingsDirectory.appendingPathComponent(job.fileName))
+    saveTranscription(nil)
+  }
+  func session(_ session: WCSession, didFinish fileTransfer: WCSessionFileTransfer, error: Error?) {
+    DispatchQueue.main.async {
+      guard let error, var job = self.transcription,
+            fileTransfer.file.metadata?["id"] as? String == job.id else { return }
+      job.status = "failed"; job.error = "Could not send recording to iPhone. " + error.localizedDescription
+      self.saveTranscription(job)
+    }
+  }
+
   func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
     DispatchQueue.main.async {
       self.reachable = session.isReachable
       self.receive(session.receivedApplicationContext)
       self.retryPending()
+      if let job = self.transcription, job.status == "queued" { self.transferRecording(job) }
       self.refreshCurrent()
     }
   }
   func sessionReachabilityDidChange(_ session: WCSession) {
     DispatchQueue.main.async {
       self.reachable = session.isReachable
-      if session.isReachable { self.retryPending(); self.refreshCurrent() }
+      if session.isReachable {
+        self.retryPending(); self.refreshCurrent()
+        self.send(["type": "transcriptionStatus"], allowQueue: false)
+      }
     }
   }
   func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {

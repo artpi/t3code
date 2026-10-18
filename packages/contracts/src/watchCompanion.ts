@@ -119,3 +119,35 @@ export const WatchSnapshot = Schema.Struct({
 export type WatchSnapshot = typeof WatchSnapshot.Type;
 export type WatchOutcome = typeof WatchOutcome.Type;
 export type WatchProject = typeof WatchProject.Type;
+
+/** Native WatchConnectivity metadata, alongside the existing JSON thread snapshot. */
+export const WatchVoiceConfiguration = Schema.Struct({
+  provider: Schema.Literals(["apple", "whisper"]),
+  ready: Schema.Boolean,
+});
+export const WatchTranscriptionResult = Schema.Struct({
+  id: Schema.String,
+  draftKey: Schema.optional(Schema.String),
+  status: Schema.Literals(["transcribing", "ready", "failed", "cancelled"]),
+  text: Schema.optional(Schema.String),
+  error: Schema.optional(Schema.String),
+});
+export const WatchTranscriptionContext = Schema.Struct({
+  voiceTranscription: WatchVoiceConfiguration,
+  transcriptions: Schema.Array(WatchTranscriptionResult),
+});
+
+export const WatchAudioTransferMetadata = Schema.Struct({
+  kind: Schema.Literal("whisper-audio-v1"),
+  id: RequestBase.id,
+  draftKey: Schema.String,
+  createdAt: Schema.Number,
+});
+export const WatchTranscriptionControl = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("transcriptionStatus") }),
+  Schema.Struct({
+    ...RequestBase,
+    type: Schema.Literal("cancelTranscription"),
+    requestId: RequestBase.id,
+  }),
+]);

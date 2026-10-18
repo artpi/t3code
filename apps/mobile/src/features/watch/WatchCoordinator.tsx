@@ -1,8 +1,23 @@
+import { useAtomValue } from "@effect/atom-react";
+import { AsyncResult, Atom } from "effect/reactivity";
+import { mobilePreferencesAtom } from "../../state/preferences";
 import { useEffect } from "react";
 import { watchNative } from "./native";
 
+const watchTranscriptionProviderAtom = Atom.make((get) => {
+  const preferences = get(mobilePreferencesAtom);
+  return AsyncResult.isSuccess(preferences)
+    ? (preferences.value.voiceTranscriptionProvider ?? "apple")
+    : null;
+});
+
 /** Keep the optional companion's subscriptions out of normal upstream builds. */
 export function WatchCoordinator() {
+  const transcriptionProvider = useAtomValue(watchTranscriptionProviderAtom);
+  useEffect(() => {
+    if (transcriptionProvider === null) return;
+    void watchNative?.configureTranscription?.(transcriptionProvider === "whisper").catch(() => {});
+  }, [transcriptionProvider]);
   useEffect(() => {
     let disposed = false;
     let stop: (() => void) | undefined;
