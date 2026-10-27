@@ -6,12 +6,13 @@ import { act, render, stubGlobal } from "../../../test/render";
 
 const state = vi.hoisted(() => ({
   projects: [] as never[],
+  hasPrimary: true,
   navigate: vi.fn(async (): Promise<void> => undefined),
   openScratchProject: vi.fn(async () => null),
 }));
 
-// One connected primary environment that can read pull requests. Its project list and
-// discovery flag start empty so a test can deliver links before they arrive.
+// One connected primary environment that can read pull requests, unless a test removes it.
+// Its project list and discovery flag start empty so a test can deliver links before they arrive.
 vi.mock(import("@tanstack/react-router"), async (original) => ({
   ...(await original()),
   useNavigate: (() => state.navigate) as never,
@@ -19,12 +20,12 @@ vi.mock(import("@tanstack/react-router"), async (original) => ({
 }));
 vi.mock(import("../../state/environments"), async (original) => ({
   ...(await original()),
-  usePrimaryEnvironmentId: () => "local" as EnvironmentId,
-  usePrimaryEnvironment: (() => ({
-    environmentId: "local",
-    connection: { phase: "connected" },
-    serverConfig: {},
-  })) as never,
+  useEnvironmentCatalogReady: () => true,
+  usePrimaryEnvironmentId: () => (state.hasPrimary ? ("local" as EnvironmentId) : null),
+  usePrimaryEnvironment: (() =>
+    state.hasPrimary
+      ? { environmentId: "local", connection: { phase: "connected" }, serverConfig: {} }
+      : null) as never,
 }));
 vi.mock(import("../../state/server"), async (original) => {
   const { Atom } = await import("effect/reactivity");
@@ -90,6 +91,7 @@ const pullRequestView = {
 function setup() {
   vi.clearAllMocks();
   state.projects = [];
+  state.hasPrimary = true;
   appAtomRegistry.set(discoverySettled, false);
 }
 
@@ -137,4 +139,15 @@ it("holds a launch PR link until project discovery settles, then opens the PR vi
   });
   expect(state.navigate).toHaveBeenCalledExactlyOnceWith(pullRequestView);
   expect(state.openScratchProject).not.toHaveBeenCalled();
+});
+
+it("opens a thread link on a client that only views remote environments", async () => {
+  setup();
+  state.hasPrimary = false;
+  const navigated = new Promise<void>((resolve) => {
+    state.navigate.mockImplementationOnce(async () => resolve());
+  });
+  await using _coordinator = await mount("t3code://threads/remote/thread-1");
+  await act(async () => navigated);
+  expect(state.navigate).toHaveBeenCalledExactlyOnceWith({ href: "/remote/thread-1" });
 });

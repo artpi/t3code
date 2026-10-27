@@ -20,7 +20,12 @@ import { selectActiveRightPanelSurface, useRightPanelStore } from "../../rightPa
 import { appAtomRegistry } from "../../rpc/atomRegistry";
 import { resolveThreadRouteTarget } from "../../threadRoutes";
 import { assetEnvironment } from "../../state/assets";
-import { useEnvironmentHttpBaseUrl, usePrimaryEnvironment } from "../../state/environments";
+import {
+  useEnvironmentCatalogReady,
+  useEnvironmentHttpBaseUrl,
+  usePrimaryEnvironment,
+  usePrimaryEnvironmentId,
+} from "../../state/environments";
 import { previewEnvironment } from "../../state/preview";
 import { allReachableShellsLiveAtom } from "../../state/shell";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -72,7 +77,9 @@ function threadShowingBrowser(
 
 export function DesktopWebLinkCoordinator() {
   const router = useRouter();
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
   const primaryEnvironment = usePrimaryEnvironment();
+  const catalogReady = useEnvironmentCatalogReady();
   const openPullRequestsInApp = useClientSettings((settings) => settings.pullRequestLinksOpenInApp);
   const openChangeRequest = useOpenChangeRequestLink();
   const { scratchEnvironmentId, openScratchProject } = useScratchProject();
@@ -85,10 +92,14 @@ export function DesktopWebLinkCoordinator() {
   const httpBaseUrl = useEnvironmentHttpBaseUrl(primaryEnvironment?.environmentId ?? null);
   const queueRef = useRef(Promise.resolve());
   const webLinks = window.desktopBridge?.webLinks;
+  // A client that only views remote environments has no primary one. Thread links still
+  // open there; web links fall through to startThread, which reports what it cannot open.
   const ready =
     webLinks !== undefined &&
-    primaryEnvironment?.connection.phase === "connected" &&
-    primaryEnvironment.serverConfig !== null;
+    (primaryEnvironmentId === null
+      ? catalogReady
+      : primaryEnvironment?.connection.phase === "connected" &&
+        primaryEnvironment.serverConfig !== null);
 
   const reportFailure = (url: string, description = url) =>
     toastManager.add(
