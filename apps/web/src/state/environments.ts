@@ -15,7 +15,7 @@ import {
   environmentSummaries,
   useEnvironmentPresentation,
 } from "./presentation";
-import { primaryEnvironmentIdAtom } from "./primaryEnvironment";
+import { environmentCatalogReadyAtom, primaryEnvironmentIdAtom } from "./primaryEnvironment";
 import { relayEnvironmentDiscovery } from "./relay";
 import { usePreparedConnection } from "./session";
 
@@ -67,6 +67,11 @@ export function usePrimaryEnvironmentId(): EnvironmentId | null {
 
 export function readPrimaryEnvironmentId(): EnvironmentId | null {
   return appAtomRegistry.get(primaryEnvironmentIdAtom);
+}
+
+/** The catalog has loaded, so a null primary environment means this client has none. */
+export function useEnvironmentCatalogReady(): boolean {
+  return useAtomValue(environmentCatalogReadyAtom);
 }
 
 export function useEnvironment(

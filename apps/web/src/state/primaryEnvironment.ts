@@ -10,3 +10,7 @@ export const primaryEnvironmentIdAtom = Atom.make((get) => {
   }
   return null;
 }).pipe(Atom.withLabel("web-primary-environment-id"));
+
+export const environmentCatalogReadyAtom = Atom.make(
+  (get) => get(environmentCatalog.catalogValueAtom).isReady,
+).pipe(Atom.withLabel("web-environment-catalog-ready"));
